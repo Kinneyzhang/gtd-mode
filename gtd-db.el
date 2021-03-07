@@ -55,15 +55,6 @@
       memo parent]))
   "Table schemata of gtd-db.")
 
-(defun gtd-db-add-task (args)
-  "Add a task in gtd database with arguments ARGS."
-  (gtd-db-query `[:insert :into task
-                          :values (,args
-                                   ;; [,(org-id-uuid) ,name ,status
-                                   ;;  ,date ,tags ,priority ,checklist
-                                   ;;  ,memo ,parent]
-                                   )]))
-
 (defun gtd-db--get-connection ()
   "Return the database connection, if any."
   (gethash gtd-version gtd-db--connection))
@@ -108,15 +99,25 @@ SQL can be either the emacsql vector representation, or a string."
 ;;                                 :values ([,(org-id-uuid) ,name ,type
 ;;                                           ,icon ,color ,catetory])]))
 
-(defun gtd-db-retrive-checklists (&optional args)
-  (if args
-      (gtd-db-query `[:select ,args :from checklist])
-    (gtd-db-query `[:select * :from checklist])))
-
 (defun gtd-db-retrive-tasks (checklist)
   "Retrive all tasks in a specific CHECKLIST."
   (gtd-db-query `[:select * :from task
                           :where (= checklist ,checklist)]))
+
+(defun gtd-db-retrive-tasks-smartly (conditions)
+  "Retrive all tasks which satisfy the CONDITIONS."
+  (gtd-db-query `[:select * :from task
+                          :where ,conditions]))
+
+(defun gtd-db-add-task (args)
+  "Add a task in gtd database with arguments ARGS."
+  (gtd-db-query `[:insert :into task
+                          :values (,args)]))
+
+(defun gtd-db-finish-task (id)
+  "Finish a task with id ID in gtd database."
+  (gtd-db-query `[:update task :set (= status 1)
+                          :where (= id ,id)]))
 
 (provide 'gtd-db)
 ;;; gtd-db.el ends here
