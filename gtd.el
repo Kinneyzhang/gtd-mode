@@ -101,12 +101,36 @@
 The built-in smart checklists are 'All', 'Today', 'Tomorrow',
 'Latest 7 days', 'Done'.")
 
-(defvar gtd-priorities '(("none priority" . 0)
-                         ("low priority" . 1)
-                         ("middle priority" . 2)
-                         ("high priority" . 3)))
+(defvar gtd-priorities
+  '(("none priority"
+     (:id 0 :symbol "!!!" :color "grey"))
+    ("low priority"
+     (:id 1 :symbol "!" :color "blue"))
+    ("middle priority"
+     (:id 2 :symbol "!!" :color "yellow"))
+    ("high priority"
+     (:id 3 :symbol "!!!" :color "red"))))
 
-(defvar gtd-tags '("work" "home" "free" "telephone" "computer"))
+(defvar gtd-tags
+  '(("work"
+     (:foreground "white" :background "red"))
+    ("home"
+     (:foreground "white" :background "red"))
+    ("free"
+     (:foreground "white" :background "blue"))
+    ("telephone"
+     (:foreground "white" :background "blue"))
+    ("computer"
+     (:foreground "white" :background "green"))))
+
+(defvar gtd-task-default-details '(date)
+  "The default details that are shown for a task.")
+
+(defvar gtd-show-all-details nil
+  "Non-nil means show all details of a task.")
+
+(defvar gtd-show-all-finished nil
+  "Non-nil means show all finished tasks.")
 
 ;; eieio
 
@@ -129,9 +153,9 @@ The built-in smart checklists are 'All', 'Today', 'Tomorrow',
 
 ;; gtd-checklist functions
 
-(defun gtd--switch-to-buffer ()
-  "Switch to gtd buffer and do some settings."
-  (switch-to-buffer (get-buffer-create gtd-buffer))
+(defun gtd--switch-to-buffer (name)
+  "Switch to gtd buffer named NAME and do some settings."
+  (switch-to-buffer (get-buffer-create (format "*%s*" name)))
   (read-only-mode -1)
   (kill-all-local-variables)
   (gtd-mode)
@@ -149,14 +173,20 @@ The built-in smart checklists are 'All', 'Today', 'Tomorrow',
       (let* ((name checklist)
              (icon (or (gtd-checklist-attr name :icon)
                        gtd-checklist-default-icon)))
-        (insert (concat icon " " name)))
+        (insert-text-button
+         (concat icon " " name)
+         'face nil
+         'action (lambda (_btn)
+                   (gtd-checklist-enter))
+         'help-echo "Enter this checklist"
+         'follow-link t))
     (insert "")))
 
 ;;;###autoload
 (defun gtd-show-checklists ()
   "Show all checklists in gtd buffer."
   (interactive)
-  (gtd--switch-to-buffer)
+  (gtd--switch-to-buffer "Gtd Checklists")
   (let ((ewoc (ewoc-create 'gtd-checklists-pp
                            (propertize "All Checklists\n"
                                        'face 'gtd-header-face)
@@ -227,7 +257,8 @@ The built-in smart checklists are 'All', 'Today', 'Tomorrow',
          (args `[,id ,name ,status ,date ,tags
                      ,priority ,checklist ,memo ,parent])
          new-node)
-    (gtd-db-add-task args)
+    (gtd-db-query `[:insert :into task
+                            :values (,args)])
     (gtd-data-update)
     (setq new-node (ewoc-enter-last gtd-ewoc id))
     (ewoc-invalidate gtd-ewoc new-node)))
@@ -235,51 +266,215 @@ The built-in smart checklists are 'All', 'Today', 'Tomorrow',
 (cl-defmethod gtd-task--finish ((task gtd-task))
   (let ((id (oref task :id))
         (node (ewoc-locate gtd-ewoc)))
-    (gtd-db-finish-task id)
+    (gtd-db-query `[:update task :set (= status 1)
+                            :where (= id ,id)])
+    (gtd-data-update)
+    (gtd-show-tasks gtd-current-checklist)))
+
+(cl-defmethod gtd-task--withdraw ((task gtd-task))
+  (let ((id (oref task :id))
+        (node (ewoc-locate gtd-ewoc)))
+    (gtd-db-query `[:update task :set (= status 0)
+                            :where (= id ,id)])
+    (gtd-db-withdraw-task id)
+    (gtd-data-update)
+    (gtd-show-tasks gtd-current-checklist)))
+
+(cl-defmethod gtd-task--rename ((task gtd-task))
+  (let ((id (oref task :id))
+        (name (oref task :name))
+        (node (ewoc-locate gtd-ewoc)))
+    (gtd-db-query `[:update task :set (= name ,name)
+                            :where (= id ,id)])
     (gtd-data-update)
     (ewoc-invalidate gtd-ewoc node)))
 
+(cl-defmethod gtd-task--delete ((task gtd-task))
+  (let ((id (oref task :id))
+        (node (ewoc-locate gtd-ewoc)))
+    (gtd-db-query `[:delete :from task
+                            :where (= id ,id)])
+    (gtd-data-update)
+    (let ((inhibit-read-only t))
+      (ewoc-delete gtd-ewoc node))))
+
+(cl-defmethod gtd-task--edit-memo ((task gtd-task))
+  (let ((id (oref task :id))
+        (memo (oref task :memo))
+        (node (ewoc-locate gtd-ewoc)))
+    (gtd-db-query `[:update task :set (= memo ,memo)
+                            :where (= id ,id)])
+    (gtd-data-update)
+    (ewoc-invalidate gtd-ewoc node)))
+
+;;;###autoload
+(defun gtd-task-rename ()
+  "Rename the task at point."
+  (interactive)
+  (let* ((id (ewoc-data (ewoc-locate gtd-ewoc)))
+         (arg-lst (gtd-task-args id gtd-data))
+         (name (plist-get arg-lst :name))
+         (new-name (completing-read
+                    (format "Rename the task '%s': " name) nil))
+         task-args)
+    (unless (string= new-name name)
+      (setq task-args (plist-put arg-lst :name new-name))
+      (gtd-task--rename (apply #'gtd-task task-args)))))
+
+;;;###autoload
+(defun gtd-task-edit-memo ()
+  "Add a memo to the task at point."
+  (interactive)
+  (let* ((id (ewoc-data (ewoc-locate gtd-ewoc)))
+         (arg-lst (gtd-task-args id gtd-data))
+         (name (plist-get arg-lst :name))
+         (memo (plist-get arg-lst :memo))
+         (new-memo
+          (completing-read
+           (format "Edit the memo of task '%s': " name) nil nil nil memo))
+         task-args)
+    (unless (string= new-memo memo)
+      (setq task-args (plist-put arg-lst :memo new-memo))
+      (gtd-task--edit-memo (apply #'gtd-task task-args)))))
+
+;;;###autoload
+(defun gtd-task-delete ()
+  "Delete the task at point."
+  (interactive)
+  (let* ((id (gtd-ewoc-data))
+         (task-args (gtd-task-args id gtd-data)))
+    (gtd-task--delete (apply #'gtd-task task-args))))
+
 ;; 写数据库 -> 从数据库获取和更新 gtd-data -> 更新视图
+
+(defvar-local gtd-flag nil)
 
 (defun gtd-tasks-pp (id)
   "Pretty printer for showing all tasks in a checklist."
-  (when id
-    (let* ((item (gtd-task-args id gtd-data))
-           (task (apply #'gtd-task item))
-           (status (oref task :status))
-           (name (oref task :name))
-           (date (oref task :date))
-           (checklist (oref task :checklist))
-           (tags (oref task :tags))
-           (icon (gtd-checklist-attr checklist :icon))
-           (color (gtd-checklist-attr checklist :color)))
-      (insert (propertize (format "%s %s" (if (= status 0) "☐" "☑") name)
-                          'line-prefix
-                          (propertize
-                           "▎" 'face `(:foreground ,color)))))))
+  (pcase id
+    ("DONE" (when gtd-show-all-finished
+              (insert (propertize (concat "\n" id) 'face 'bold))))
+    (_
+     (let* ((item (gtd-task-args id gtd-data))
+            (task (apply #'gtd-task item))
+            (status (oref task :status))
+            (name (oref task :name))
+            (date (oref task :date))
+            (checklist (oref task :checklist))
+            (priority (oref task :priority))
+            (tags (oref task :tags))
+            (memo (oref task :memo))
+            (icon (gtd-checklist-attr checklist :icon))
+            (color (gtd-checklist-attr checklist :color)))
+       (if (= status 1)
+           (progn
+             (insert-text-button
+              (propertize "☑" 'line-prefix (propertize
+                                            "▎" 'face `(:foreground ,color)))
+              'face 'shadow 'action (lambda (_btn) (gtd-task-finish-toggle))
+              'help-echo "Click to change the task status"
+              'follow-link t)
+             (insert "  " (propertize name 'face 'shadow))
+             (when (and date (or gtd-show-all-details
+                                 (member 'date gtd-task-default-details)))
+               (insert
+                " " (propertize (gtd-task-date-format date)'display '(raise 0.1)
+                                'face 'shadow)))
+             (when (and tags (or gtd-show-all-details
+                                 (member 'tags gtd-task-default-details)))
+               (insert "  ")
+               (dolist (tag tags)
+                 (insert (propertize (concat "#" tag) 'face 'shadow) " ")))
+             (when (and priority (or gtd-show-all-details
+                                     (member 'priority gtd-task-default-details)))
+               (insert "  ")
+               (let ((symbol (gtd-common-attr :id priority gtd-priorities :symbol))
+                     (color (gtd-common-attr :id priority gtd-priorities :color)))
+                 (insert (propertize symbol 'face 'shadow))))
+             (when (and memo (or gtd-show-all-details
+                                 (member 'memo gtd-task-default-details)))
+               (insert (propertize (concat "\n   " memo)
+                                   'line-prefix (propertize
+                                                 "▎" 'face
+                                                 `(:foreground ,color))
+                                   'face 'shadow))))
+         (insert-text-button
+          (propertize (if (= status 0) "☐" "☑")
+                      'line-prefix (propertize
+                                    "▎" 'face `(:foreground ,color)))
+          'face nil
+          'action (lambda (_btn) (gtd-task-finish-toggle))
+          'help-echo "Click to change the task status"
+          'follow-link t)
+         (insert "  ")
+         (insert-text-button
+          name
+          'face nil
+          'action (lambda (_btn) (gtd-edit-task-details))
+          'help-echo "Click to edit the task details"
+          'follow-link t)
+         (when (and date (or gtd-show-all-details
+                             (member 'date gtd-task-default-details)))
+           (insert
+            " " (propertize (gtd-task-date-format date)
+                            'display '(raise 0.1)
+                            'face '(:foreground "red" :height 0.8))))
+         (when (and tags (or gtd-show-all-details
+                             (member 'tags gtd-task-default-details)))
+           (insert "  ")
+           (dolist (tag tags)
+             (insert (propertize (concat "#" tag) 'face
+                                 ;; (plist-put
+                                 ;;  (cadr (assoc tag gtd-tags))
+                                 ;;  :box '(:line-width
+                                 ;;         1
+                                 ;;         :color "white"))
+                                 '(:foreground "blue")
+                                 )
+                     " ")))
+         (when (and priority (or gtd-show-all-details
+                                 (member 'priority gtd-task-default-details)))
+           (insert "  ")
+           (let ((symbol (gtd-common-attr :id priority gtd-priorities :symbol))
+                 (color (gtd-common-attr :id priority gtd-priorities :color)))
+             (insert (propertize symbol 'face `(:foreground ,color)))))
+         (when (and memo (or gtd-show-all-details
+                             (member 'memo gtd-task-default-details)))
+           (insert (propertize (concat "\n   " memo)
+                               'line-prefix (propertize
+                                             "▎" 'face
+                                             `(:foreground ,color))
+                               'face '(:foreground "#888")))))))))
+
+;; show all finished tasks
+;; gtd-show-all-finished
 
 ;;;###autoload
-(defun gtd-show-tasks (&optional checklist)
+(defun gtd-show-tasks (checklist)
   "Show all tasks in a specific CHECKLIST."
   (interactive)
-  (let* ((checklist (or checklist
-                        (completing-read "Choose a checklist: "
-                                         (gtd-checklists-attrs) nil t)))
-         (_ (gtd--switch-to-buffer))
+  (let* ((_ (gtd--switch-to-buffer "Gtd Tasks"))
          (icon (or (gtd-checklist-attr checklist :icon)
                    gtd-checklist-default-icon))
          (tasks (cond
                  ((assoc checklist gtd-checklists)
-                  (gtd-db-retrive-tasks checklist))
+                  (gtd-db-query `[:select * :from task
+                                          :where (= checklist ,checklist)]))
                  ((assoc checklist gtd-smart-checklists)
                   (gtd-db-retrive-tasks-smartly
                    (gtd-task-conditions-smartly checklist)))))
+         (group-tasks (seq-group-by (lambda (lst) (nth 2 lst)) tasks))
+         (todo-tasks (cdr (assoc 0 group-tasks)))
+         (finished-tasks (cdr (assoc 1 group-tasks)))
          (ewoc (ewoc-create 'gtd-tasks-pp
                             (propertize (format "%s %s\n" icon checklist)
                                         'face 'gtd-header-face)
                             (substitute-command-keys
                              "\n\\{gtd-mode-map}")))
-         task-args task-args-lst)
+         task-args task-args-lst pos)
+    (set (make-local-variable 'gtd-ewoc) ewoc)
+    (set (make-local-variable 'gtd-task-default-details)
+         gtd-task-default-details)
     (set (make-local-variable 'gtd-current-checklist) checklist)
     (when tasks
       (dolist (task tasks)
@@ -288,14 +483,40 @@ The built-in smart checklists are 'All', 'Today', 'Tomorrow',
       (setq task-args-lst (reverse task-args-lst))
       (set (make-local-variable 'gtd-ewoc) ewoc)
       (set (make-local-variable 'gtd-data) task-args-lst)
-      (dolist (task tasks)
-        (ewoc-enter-last ewoc (car task))))
+      (dolist (task todo-tasks)
+        (ewoc-enter-last ewoc (car task)))
+      (when gtd-show-all-finished
+        (ewoc-enter-last ewoc "DONE")
+        (dolist (task finished-tasks)
+          (ewoc-enter-last ewoc (car task)))))
+    ;; FIXME: how to preserve the cursor position when update ewoc nodes.
+    ;; idea: use ewoc-goto-node
     (read-only-mode 1)))
+
+;;;###autoload
+(defun gtd-task-show-details-toggle ()
+  "Show all details of each task in gtd-tasks buffer."
+  (interactive)
+  (if gtd-show-all-details
+      (setq gtd-show-all-details nil)
+    (setq gtd-show-all-details t))
+  (gtd-show-tasks gtd-current-checklist))
+
+;;;###autoload
+(defun gtd-task-show-finished-toggle ()
+  "Show all finished tasks in gtd-tasks buffer."
+  (interactive)
+  (if gtd-show-all-finished
+      (setq gtd-show-all-finished nil)
+    (setq gtd-show-all-finished t))
+  (gtd-show-tasks gtd-current-checklist))
 
 (defun gtd-data-update ()
   "Update the value of `gtd-data' in ewoc."
-  (let ((tasks (gtd-db-retrive-tasks gtd-current-checklist))
-        task-args task-args-lst)
+  (let* ((checklist gtd-current-checklist)
+         (tasks (gtd-db-query `[:select * :from task :where
+                                        (= checklist ,checklist)]))
+         task-args task-args-lst)
     (dolist (task tasks)
       (setq task-args (gtd-construct-args gtd-task-slots task))
       (push task-args task-args-lst))
@@ -315,7 +536,7 @@ The built-in smart checklists are 'All', 'Today', 'Tomorrow',
                        (completing-read "Choose the task checklist: "
                                         (gtd-checklists-attrs) nil t)))
         memo parent task-args)
-    (setq priority (cdr (assoc priority gtd-priorities)))
+    (setq priority (gtd-plist-get priority gtd-priorities :id))
     (setq task-args
           (gtd-construct-args
            gtd-task-slots
@@ -331,11 +552,67 @@ The built-in smart checklists are 'All', 'Today', 'Tomorrow',
          (args (gtd-task-args id gtd-data)))
     (gtd-task--finish (apply #'gtd-task args))))
 
-(defun gtd-task-args (id task-lst)
-  "Return the task with id ID in a TASK-LIST."
-  (seq-find (lambda (lst)
-              (string= (plist-get lst :id) id))
-            task-lst))
+;;;###autoload
+(defun gtd-withdraw-finished-task ()
+  "Withdraw the finished task."
+  (interactive)
+  (let* ((id (ewoc-data (ewoc-locate gtd-ewoc)))
+         (args (gtd-task-args id gtd-data)))
+    (gtd-task--withdraw (apply #'gtd-task args))))
+
+(defun gtd-task-finish-toggle ()
+  "Finish the task if the task is unfinished.
+Withdraw the finished task if the task is finished."
+  (let* ((id (ewoc-data (ewoc-locate gtd-ewoc)))
+         (status (gtd-task-attr id :status)))
+    (pcase status
+      (0 (gtd-finish-task))
+      (1 (gtd-withdraw-finished-task)))))
+
+
+
+;; (defun gtd-task-details-pp (id)
+;;   (when id
+;;     (insert (format "%s %s" (if (= status 0) "☐" "☑") name))))
+
+;; (defun gtd-show-task-details (data)
+;;   "Show the details of a task with DATA."
+;;   (interactive)
+;;   (let* ((id (plist-get data :id))
+;;          (name (plist-get data :name))
+;;          (status (plist-get data :status))
+;;          (priority (plist-get data :priority))
+;;          (date (plist-get data :date))
+;;          (tags (plist-get data :tags))
+;;          (checklist (plist-get data :checklist))
+;;          (icon (gtd-checklist-attr checklist :icon))
+;;          (_ (gtd--switch-to-buffer "Gtd Details"))
+;;          (ewoc (ewoc-create 'gtd-task-details-pp
+;;                             (propertize (format "%s %s\n" icon checklist)
+;;                                         'face 'gtd-header-face)
+;;                             (substitute-command-keys
+;;                              "\n\\{gtd-mode-map}"))))
+;;     (set (make-local-variable 'gtd-ewoc) ewoc)
+;;     (set (make-local-variable 'gtd-data) data)
+;;     (set (make-local-variable 'gtd-current-checklist) checklist)
+;;     (set (make-local-variable 'gtd-current-task) id)
+;;     (ewoc-enter-last ewoc id)
+;;     (read-only-mode 1)))
+
+(defvar gtd-task-edit-actions
+  '("Rename Task" "Add Memo" "Add Subtask" "Change Date"
+    "Change Priority" "Change Checklist"))
+
+;;;###autoload
+(defun gtd-edit-task-details ()
+  "Edit the details of a task at point."
+  (interactive)
+  (let* ((id (ewoc-data (ewoc-locate gtd-ewoc)))
+         (name (gtd-task-attr id :name))
+         (action (completing-read
+                  "Choose the action to task '%s'" name)
+                 gtd-task-edit-actions nil t))
+    ))
 
 ;; task functions
 
@@ -347,11 +624,14 @@ The built-in smart checklists are 'All', 'Today', 'Tomorrow',
 (progn
   (setq gtd-mode-map (make-sparse-keymap))
   (define-key gtd-mode-map (kbd "C") #'gtd-show-checklists)
+  (define-key gtd-mode-map (kbd "D") #'gtd-task-show-details-toggle)
+  (define-key gtd-mode-map (kbd "A") #'gtd-task-show-finished-toggle)
   (define-key gtd-mode-map (kbd "q") #'kill-current-buffer)
   (define-key gtd-mode-map (kbd "g") #'gtd-refresh-buffer)
-  (define-key gtd-mode-map (kbd "<RET>") #'gtd-checklist-enter)
+  ;; (define-key gtd-mode-map (kbd "<RET>") #'gtd-checklist-enter)
   (define-key gtd-mode-map (kbd "+") #'gtd-add-task)
-  (define-key gtd-mode-map (kbd "d") #'gtd-finish-task))
+  (define-key gtd-mode-map (kbd "d") #'gtd-finish-task)
+  (define-key gtd-mode-map (kbd "u") #'gtd-withdraw-finished-task))
 
 (provide 'gtd)
 ;;; gtd.el ends here

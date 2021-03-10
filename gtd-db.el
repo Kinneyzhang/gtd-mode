@@ -94,30 +94,10 @@ SQL can be either the emacsql vector representation, or a string."
 
 ;; gtd functions.
 
-;; (defun checklist-db-add-checklist (name type icon color catetory)
-;;   (checklist-db-query `[:insert :into checklist
-;;                                 :values ([,(org-id-uuid) ,name ,type
-;;                                           ,icon ,color ,catetory])]))
-
-(defun gtd-db-retrive-tasks (checklist)
-  "Retrive all tasks in a specific CHECKLIST."
-  (gtd-db-query `[:select * :from task
-                          :where (= checklist ,checklist)]))
-
 (defun gtd-db-retrive-tasks-smartly (conditions)
   "Retrive all tasks which satisfy the CONDITIONS."
   (gtd-db-query `[:select * :from task
                           :where ,conditions]))
-
-(defun gtd-db-add-task (args)
-  "Add a task in gtd database with arguments ARGS."
-  (gtd-db-query `[:insert :into task
-                          :values (,args)]))
-
-(defun gtd-db-finish-task (id)
-  "Finish a task with id ID in gtd database."
-  (gtd-db-query `[:update task :set (= status 1)
-                          :where (= id ,id)]))
 
 (provide 'gtd-db)
 ;;; gtd-db.el ends here

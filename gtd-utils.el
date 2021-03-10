@@ -34,11 +34,16 @@
 (require 'seq)
 
 ;;;; Declarations
+(defvar gtd-data)
 (defvar gtd-checklists)
 (defvar gtd-smart-checklists)
 (defvar gtd-smart-default-rules)
 
 ;;;; Utilities
+(defun gtd-ewoc-data ()
+  "Return the ewoc data at point."
+  (ewoc-data (ewoc-locate gtd-ewoc)))
+
 (defun gtd-plist->alist (plist)
   (if (null plist) '()
     (cons
@@ -79,6 +84,27 @@ If ATTRIBUTE is nil, return a name list of checklists."
                        (assoc checklist gtd-smart-checklists)))
              attribute))
 
+(defun gtd-plist-get (keyword lst prop)
+  "Return the value of property PROP in a list LST with KEYWORD."
+  (plist-get (cadr (assoc keyword lst)) prop))
+
+(defun gtd-common-attr (attr1 value lst attr2)
+  "Return the value of ATTR2 in the LST with ATTR1 whose value is VALUE."
+  (plist-get (cadr (seq-find (lambda (item)
+                               (equal (plist-get (cadr item) attr1) value))
+                             lst))
+             attr2))
+
+(defun gtd-task-args (id task-lst)
+  "Return the task with id ID in a TASK-LIST."
+  (seq-find (lambda (lst)
+              (string= (plist-get lst :id) id))
+            task-lst))
+
+(defun gtd-task-attr (id attribute)
+  "Return the ATTRIBUTE of a task with id ID."
+  (plist-get (gtd-task-args id gtd-data) attribute))
+
 (defun gtd-curr-week-range ()
   "Return the cons cell (start . end) of current week.
 'today' means the time 00:00:00 of today.
@@ -88,6 +114,15 @@ The current week range should be 'start <= date < end'."
          (start (format "today-%s" (1- day-of-week)))
          (end (format "today+%s" (- 8 day-of-week))))
     (cons start end)))
+
+(defun gtd-task-date-format (date)
+  "Return the new format of DATE in each specific checklist view.
+
+If the year of date equals to current year, return the date 
+format 'month-day'.  Otherwise, return the date format 'year-month-day'."
+  (if (string= (substring date 0 4) (format-time-string "%Y"))
+      (substring date 5)
+    date))
 
 (defun gtd-format-date (&optional time)
   "Format TIME to 'year-month-day' format.
@@ -177,4 +212,3 @@ If TIME is nil, fomrat current time."
 
 (provide 'gtd-utils)
 ;;; gtd-utils.el ends here
-
