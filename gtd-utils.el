@@ -74,25 +74,25 @@
 If ATTRIBUTE is nil, return a name list of checklists."
   (mapcar (lambda (lst)
             (if attribute
-                (plist-get (cadr lst) attribute)
+                (plist-get (cdr lst) attribute)
               (car lst)))
           gtd-checklists))
 
 (defun gtd-checklist-attr (checklist attribute)
   "Return the value of ATTRIBUTE of checklist CHECKLIST."
-  (plist-get (cadr (or (assoc checklist gtd-checklists)
-                       (assoc checklist gtd-smart-checklists)))
+  (plist-get (cdr (or (assoc checklist gtd-checklists)
+                      (assoc checklist gtd-smart-checklists)))
              attribute))
 
 (defun gtd-plist-get (keyword lst prop)
   "Return the value of property PROP in a list LST with KEYWORD."
-  (plist-get (cadr (assoc keyword lst)) prop))
+  (plist-get (cdr (assoc keyword lst)) prop))
 
 (defun gtd-common-attr (attr1 value lst attr2)
   "Return the value of ATTR2 in the LST with ATTR1 whose value is VALUE."
-  (plist-get (cadr (seq-find (lambda (item)
-                               (equal (plist-get (cadr item) attr1) value))
-                             lst))
+  (plist-get (cdr (seq-find (lambda (item)
+                              (equal (plist-get (cdr item) attr1) value))
+                            lst))
              attr2))
 
 (defun gtd-task-args (id task-lst)
@@ -204,11 +204,6 @@ If TIME is nil, fomrat current time."
   (mapcar (lambda (item)
             (cdr (assoc (concat item " priority") gtd-priorities)))
           lst))
-
-(defun gtd-task-conditions-smartly (checklist)
-  "Return the conditions of CHECKLIST used for database querying."
-  (let ((rules (cadr (gtd-checklist-attr checklist :rules))))
-    (gtd--parse-rule rules)))
 
 (provide 'gtd-utils)
 ;;; gtd-utils.el ends here
