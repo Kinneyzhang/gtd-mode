@@ -52,7 +52,7 @@
       (status :not-null)
       date tags priority
       (checklist :not-null)
-      memo parent]))
+      memo parent children]))
   "Table schemata of gtd-db.")
 
 (defun gtd-db--get-connection ()

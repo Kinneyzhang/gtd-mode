@@ -70,14 +70,20 @@
   "Default rules for smart checklists.")
 
 (defvar gtd-smart-checklists
-  '(("All" :icon "🗂")
-    ("Today" :icon "📆" :rules '(date "today"))
-    ("Tomorrow" :icon "☀" :rules '(date "today+1"))
-    ("This week" :rules `(date ,(car (gtd-curr-week-range))
-                               ,(cdr (gtd-curr-week-range))))
-    ("Latest 7 days" :icon "📅" :rules '(date "today" "today+7"))
-    ("Most important today" :rules '(and (date "today")
-                                         (priority "high"))))
+  `(("All"
+     :icon "🗂")
+    ("Today"
+     :icon "📆" :rules (date ,(gtd-format-date)))
+    ("Tomorrow"
+     :icon "☀" :rules (date ,(gtd-date-change '+ 1)))
+    ("This week"
+     :rules (date ,(car (gtd-curr-week-range))
+                  ,(cdr (gtd-curr-week-range))))
+    ("Latest 7 days"
+     :icon "📅" :rules (date ,(gtd-format-date) ,(gtd-date-change '+ 6)))
+    ("Most important today"
+     :rules (and (date ,(gtd-format-date))
+                 (priority "high"))))
   "Smart checklists.")
 
 
@@ -201,12 +207,13 @@ The built-in smart checklists are 'All', 'Today', 'Tomorrow',
   ((id :initarg :id :initform (org-id-uuid) :type string)
    (name :initarg :name :initform "Default task" :type string)
    (status :initarg :status :initform 0 :type number)
-   (date :initarg :date :initform nil :type (or null string))
+   (date :initarg :date :initform nil :type (or null number))
    (tags :initarg :tags :initform nil :type (or null list))
    (priority :initarg :priority :initform 0 :type number)
    (checklist :initarg :checklist :initform "Inbox" :type string)
    (memo :initarg :memo :initform nil :type (or null string))
-   (parent :initarg :parent :initform nil :type (or null string)))
+   (parent :initarg :parent :initform nil :type (or null string))
+   (children :initarg :children :initform nil :type (or null list)))
   "A class for processing task.")
 
 (defvar gtd-task-slots
@@ -223,8 +230,9 @@ The built-in smart checklists are 'All', 'Today', 'Tomorrow',
          (checklist (oref task :checklist))
          (memo (oref task :memo))
          (parent (oref task :parent))
+         (children (oref task :children))
          (args `[,id ,name ,status ,date ,tags
-                     ,priority ,checklist ,memo ,parent])
+                     ,priority ,checklist ,memo ,parent ,children])
          new-node)
     (gtd-db-query `[:insert :into task
                             :values (,args)])
@@ -277,12 +285,15 @@ The built-in smart checklists are 'All', 'Today', 'Tomorrow',
 
 ;; 写数据库 -> 从数据库获取和更新 gtd-data -> 更新视图
 
+(defun gtd-uuid-p (str)
+  "Judge if the STR is a uuid."
+  (and (stringp str)
+       (string-match "[a-z0-9]\\{8\\}-[a-z0-9]\\{4\\}-[a-z0-9]\\{4\\}-[a-z0-9]\\{4\\}-[a-z0-9]\\{12\\}" str)))
+
 (defun gtd-tasks-pp (id)
   "Pretty printer for showing all tasks in a checklist."
   (pcase id
-    ("DONE" (when gtd-show-all-finished
-              (insert (propertize (concat "\n" id) 'face 'bold))))
-    (_
+    ((pred org-uuidgen-p)
      (let* ((item (gtd-task-args id gtd-data))
             (task (apply #'gtd-task item))
             (status (oref task :status))
@@ -306,7 +317,9 @@ The built-in smart checklists are 'All', 'Today', 'Tomorrow',
              (when (and date (or gtd-show-all-details
                                  (member 'date gtd-task-default-details)))
                (insert
-                " " (propertize (gtd-task-date-format date)'display '(raise 0.1)
+                " " (propertize (gtd-task-date-format
+                                 (gtd-seconds-to-date date))
+                                'display '(raise 0.1)
                                 'face 'shadow)))
              (when (and tags (or gtd-show-all-details
                                  (member 'tags gtd-task-default-details)))
@@ -344,7 +357,7 @@ The built-in smart checklists are 'All', 'Today', 'Tomorrow',
          (when (and date (or gtd-show-all-details
                              (member 'date gtd-task-default-details)))
            (insert
-            " " (propertize (gtd-task-date-format date)
+            " " (propertize (gtd-task-date-format (gtd-seconds-to-date date))
                             'display '(raise 0.1)
                             'face '(:foreground "red" :height 0.8))))
          (when (and tags (or gtd-show-all-details
@@ -372,7 +385,9 @@ The built-in smart checklists are 'All', 'Today', 'Tomorrow',
                                'line-prefix (propertize
                                              "▎" 'face
                                              `(:foreground ,color))
-                               'face '(:foreground "#888")))))))))
+                               'face '(:foreground "#888")))))))
+    ((pred stringp)
+     (insert (propertize id 'face 'bold)))))
 
 ;; show all finished tasks
 ;; gtd-show-all-finished
@@ -389,11 +404,11 @@ The built-in smart checklists are 'All', 'Today', 'Tomorrow',
                   (gtd-db-query `[:select * :from task
                                           :where (= checklist ,checklist)]))
                  ((assoc checklist gtd-smart-checklists)
-                  (let ((rules (cadr (gtd-checklist-attr checklist :rules))))
+                  (let ((rules (gtd-checklist-attr checklist :rules)))
                     (if rules
                         (gtd-db-query
                          `[:select * :from task
-                                   :where ,(gtd--parse-rule rules)])
+                                   :where ,(gtd--parse-rules rules)])
                       (gtd-db-query `[:select * :from task]))))))
          (group-tasks (seq-group-by (lambda (lst) (nth 2 lst)) tasks))
          (todo-tasks (cdr (assoc 0 group-tasks)))
@@ -408,19 +423,25 @@ The built-in smart checklists are 'All', 'Today', 'Tomorrow',
     (set (make-local-variable 'gtd-task-default-details)
          gtd-task-default-details)
     (set (make-local-variable 'gtd-current-checklist) checklist)
-    (when tasks
+    (if (not tasks)
+        (ewoc-enter-last ewoc "Press + to add a task.")
       (dolist (task tasks)
         (setq task-args (gtd-construct-args gtd-task-slots task))
         (push task-args task-args-lst))
       (setq task-args-lst (reverse task-args-lst))
       (set (make-local-variable 'gtd-ewoc) ewoc)
       (set (make-local-variable 'gtd-data) task-args-lst)
-      (dolist (task todo-tasks)
-        (ewoc-enter-last ewoc (car task)))
+      ;; (message "todo: %S" todo-tasks)
+      ;; (message "done: %S" finished-tasks)
+      (if todo-tasks
+          (dolist (task todo-tasks)
+            (ewoc-enter-last ewoc (car task)))
+        (ewoc-enter-last ewoc "Press + to add a task."))
       (when gtd-show-all-finished
-        (ewoc-enter-last ewoc "DONE")
-        (dolist (task finished-tasks)
-          (ewoc-enter-last ewoc (car task)))))
+        (when finished-tasks
+          (ewoc-enter-last ewoc "\nDONE")
+          (dolist (task finished-tasks)
+            (ewoc-enter-last ewoc (car task))))))
     ;; FIXME: how to preserve the cursor position when update ewoc nodes.
     ;; idea: use ewoc-goto-node
     (read-only-mode 1)))
@@ -468,6 +489,7 @@ The built-in smart checklists are 'All', 'Today', 'Tomorrow',
                        (completing-read "Choose the task checklist: "
                                         (gtd-checklists-attrs) nil t)))
         memo parent task-args)
+    (setq date (gtd-date-to-seconds date))
     (setq priority (gtd-plist-get priority gtd-priorities :id))
     (setq task-args
           (gtd-construct-args

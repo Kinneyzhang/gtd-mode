@@ -98,7 +98,7 @@ If ATTRIBUTE is nil, return a name list of checklists."
 (defun gtd-task-args (id task-lst)
   "Return the task with id ID in a TASK-LIST."
   (seq-find (lambda (lst)
-              (string= (plist-get lst :id) id))
+              (equal (plist-get lst :id) id))
             task-lst))
 
 (defun gtd-task-attr (id attribute)
@@ -111,8 +111,8 @@ If ATTRIBUTE is nil, return a name list of checklists."
 
 The current week range should be 'start <= date < end'."
   (let* ((day-of-week (string-to-number (format-time-string "%u")))
-         (start (format "today-%s" (1- day-of-week)))
-         (end (format "today+%s" (- 8 day-of-week))))
+         (start (gtd-date-change '- (1- day-of-week)))
+         (end (gtd-date-change '+ (- 7 day-of-week))))
     (cons start end)))
 
 (defun gtd-task-date-format (date)
@@ -124,80 +124,135 @@ format 'month-day'.  Otherwise, return the date format 'year-month-day'."
       (substring date 5)
     date))
 
+(defun gtd-date-to-seconds (time)
+  "Transform the 'year-month-day (Hour:Minute:second)' 
+format of TIME to the seconds of format 'year-month-day 00:00:00'."
+  (let ((time-spec (concat (substring time 0 10) " 00:00:00")))
+    (time-to-seconds (date-to-time time-spec))))
+
+(defun gtd-time-to-seconds (time)
+  "Transform the 'year-month-day (Hour:Minute:second)' 
+format of TIME to the precise seconds."
+  (let* ((time-spec (if (= (length time) 10)
+                        (concat time " 00:00:00")
+                      time)))
+    (time-to-seconds (date-to-time time-spec))))
+
 (defun gtd-format-date (&optional time)
   "Format TIME to 'year-month-day' format.
 If TIME is nil, fomrat current time."
   (format-time-string "%Y-%m-%d" (or time (current-time))))
 
-(defun gtd-date-to-seconds (date)
-  "Transform 'year-month-day' time format to seconds."
-  (let* ((time-spec (concat date " 00:00:00"))
-         (seconds (time-to-seconds (date-to-time time-spec))))
-    seconds))
-
 (defun gtd-seconds-to-date (seconds)
   "Transform seconds to 'year-month-day' time format."
   (gtd-format-date seconds))
 
-(defun gtd--parse-rule-sugar (keyword sugar)
-  (pcase keyword
-    ('date
-     (let ((str (string-trim-left sugar "today"))
-           plus-or-minus num date)
-       (if (string-empty-p str)
-           (gtd-format-date)
-         (setq plus-or-minus (intern (substring str 0 1)))
-         (setq num (string-to-number (substring str 1)))
-         (setq date (gtd-seconds-to-date
-                     (eval `(,plus-or-minus
-                             ,(gtd-date-to-seconds (gtd-format-date))
-                             ,(* num 86400))))))))
-    ('status
-     (pcase sugar
-       ("todo" 0)
-       ("done" 1)))))
+(defun gtd-date-change (operation num &optional from)
+  "Make NUM times of OPERATION change to FROM date.
+If FROM is nil, make changes to the current date."
+  (let ((from (or from (gtd-format-date))))
+    (eval `(gtd-seconds-to-date (,operation (gtd-date-to-seconds from)
+                                            (* num 86400))))))
 
-(defun gtd--parse-rule (rules)
-  "Parse the keyword in smart checklist rules."
-  (let (lst)
-    (setq lst (pcase (car rules)
-                ;; ((or 'and 'or))
-                ('date
-                 (let* ((date-lst (cdr rules))
-                        (date-len (length date-lst)))
-                   (cond
-                    ((= 1 date-len)
-                     (let* ((sugar (car date-lst))
-                            (date (gtd--parse-rule-sugar 'date sugar)))
-                       `(like date ,(concat date "%"))))
-                    ((= 2 date-len)
-                     (let ((start-date (gtd--parse-rule-sugar 'date (nth 0 date-lst)))
-                           (end-date (gtd--parse-rule-sugar 'date (nth 1 date-lst))))
-                       `(and (>= date (like ,(concat start-date "%")))
-                             (< date (like ,(concat end-date "%")))))))))
-                ('priority
-                 (let* ((lst (cdr rules))
-                        (len (length lst)))
-                   (pcase len
-                     (1 `(= priority
-                            ,(cdr (assoc
-                                   (concat (car lst) " priority")
-                                   gtd-priorities))))
-                     (_ `(in priority ,(gtd--priority-val-lst lst))) ;; need query res?
-                     )))
-                ('checklist
-                 (let* ((lst (cdr rules))
-                        (len (length lst)))
-                   (pcase len
-                     (1 `(= checklist ,(car lst)))
-                     (_ `(in priority ,lst)) ;; need query res?
-                     )))
-                ;; ..............
-                ))
-    (if (equal (car lst) (or 'and 'or))
-        (setq lst (append lst '((= status 0))))
-      (setq lst (list 'and lst '(= status 0))))
-    lst))
+;; '(date "2021-03-03")
+;; => `(and (>= date ,(gtd-date-to-seconds "2021-03-03"))
+;;          (< date ,(gtd-date-to-seconds "2021-03-04")))
+;; '(date "2021-03-03" "2021-03-09")
+;; => `(and (>= date ,(gtd-date-to-seconds "2021-03-03"))
+;;          (< date ,(gtd-date-to-seconds "2021-03-10")))
+
+;; today
+;; `(date ,(gtd-format-date))
+
+;; '(checklist "Next") => '(= checklist "Next")
+;; '(checklist "Next" "Someday/Maybe") => '(in checklist ["Next" "Someday/Maybe"])
+
+;; '(priority "high") '(priority "middle") '(priority "low") '(priority "none") => '(= priority 3)
+;; '(priority "high" "middle") => '(in priority ["high" "middle"])
+
+;; '(tags "free") => '(= tags "free")
+;; '(tags "free" "home") => '(in tags ["free" "home"])
+
+;; project
+;; '(and (parent "false") (children "true"))
+;; => (and (is parent nil) (is-not children nil))
+
+;; (gtd-db-query '[:select name :from task
+;;                         :where (is parent nil)])
+
+;; 补全日期比较
+;; (gtd-db-query `[:select name :from task
+;;                         :where (>= date "2021-03-07%")])
+;; (gtd-db-query `[:select [name date] :from task])
+
+;; (gtd-db-query `[:select [name] :from task
+;;                         :where (is-not date nil)])
+
+(defvar gtd-rule-attrs
+  '(date tags priority checklist parent children))
+
+(defun gtd--parse-rules (rules)
+  "Parse the rules of `gtd-smart-checklists' 
+into the database query conditions."
+  (let ((symbol (car rules))
+        (rests (cdr rules)))
+    (pcase symbol
+      ((or 'and 'or)
+       (let (res)
+         (dolist (elem rests)
+           (push (gtd-parse-rules elem) res))
+         (append `(,symbol) (reverse res))))
+      ((and elem (guard (member elem gtd-rule-attrs)))
+       (pcase elem
+         ('date
+          (pcase nil
+            ((and (guard (= (length rests) 1))
+                  (let time (car rests)))
+             (pcase time
+               ('t '(is-not date nil))
+               ('nil '(is date nil))
+               (_ `(and (>= date ,(gtd-date-to-seconds time))
+                        (< date ,(+ (gtd-date-to-seconds time) 86400))))))
+            ((and (guard (= (length rests) 2))
+                  (let time1 (car rests))
+                  (let time2 (cadr rests)))
+             `(and (>= date ,(gtd-date-to-seconds time1))
+                   (< date ,(+ (gtd-date-to-seconds time2) 86400))))))
+         ('tags
+          ()
+          )
+         ((or 'parent 'children)
+          (pcase (car rests)
+            ('t `(is-not ,symbol nil))
+            ('nil `(is ,symbol nil))))
+         ((or 'priority 'checklist)
+          (pcase nil
+            ((and (guard (= (length rests) 1))
+                  (let val (car rests)))
+             (if (eq elem 'priority)
+                 `(= ,symbol
+                     ,(gtd-plist-get
+                       (concat val " priority") gtd-priorities :id))
+               `(= ,symbol ,val)))
+            ((guard (> (length rests) 1))
+             (if (eq elem 'priority)
+                 `(in ,symbol,(vconcat (mapcar (lambda (val)
+                                                 (gtd-plist-get
+                                                  (concat val " priority")
+                                                  gtd-priorities :id))
+                                               rests)))
+               `(in ,symbol ,(vconcat rests))))))))
+      (_ (error "Invalid `gtd-smart-checklists' rules!")))))
+
+;; test
+;; (gtd--parse-rules '(or (date t)
+;;                        (date "2021-09-09")))
+;; (gtd--parse-rules '(and (parent nil)
+;;                         (children t)))
+;; (gtd--parse-rules `(and
+;;                     (date ,(gtd-format-date))
+;;                     (checklist "Next" "Inbox")
+;;                     (priority "high" "low")))
 
 (defun gtd--priority-val-lst (lst)
   "Transform a priority string list into a number list."
