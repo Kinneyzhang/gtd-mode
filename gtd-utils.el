@@ -39,6 +39,8 @@
 (defvar gtd-smart-checklists)
 (defvar gtd-smart-default-rules)
 
+(defvar gtd-weekday-seq '("Mo" "Tu" "We" "Th" "Fr" "Sa" "Su"))
+
 ;;;; Utilities
 (defun gtd-ewoc-data ()
   "Return the ewoc data at point."
@@ -153,6 +155,19 @@ If FROM is nil, make changes to the current date."
   (let ((from (or from (gtd-format-date))))
     (eval `(gtd-seconds-to-date (,operation (gtd-date-to-seconds from)
                                             (* num 86400))))))
+
+(defun gtd--day-to-str (day &optional with-zero)
+  "Convert the number DAY to a string.
+If WITH-ZERO is non-nil, concat zero to number below ten."
+  (if with-zero
+      (if (< day 10)
+          (format "0%s" day)
+        (number-to-string day))
+    (number-to-string day)))
+
+(defun gtd--day-to-date (month day)
+  "Convert the number DAY to date string according to MONTH."
+  (concat month "-" (gtd--day-to-str day t)))
 
 ;; '(date "2021-03-03")
 ;; => `(and (>= date ,(gtd-date-to-seconds "2021-03-03"))
