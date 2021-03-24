@@ -1,12 +1,12 @@
-;;; gtd-calendar.el --- purpose
+;;; gtd-calendar.el --- Gtd calendar module  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2021 Kinney Zhang
 ;;
 ;; Version: 0.0.1
-;; Keywords: keyword1 keyword2
-;; Author: Kinney Zhang <kinneyzhang666 AT gmail DOT com>
-;; URL: http://github.com/usrname/gtd-calendar
-;; Package-Requires: ((emacs "24.4"))
+;; Keywords: gtd convenience
+;; Author: Kinney Zhang <kinneyzhang666@gmail.com>
+;; URL: https://github.com/Kinneyzhang/gtd-mode
+;; Package-Requires: ((emacs "26.1"))
 
 ;; This file is not part of GNU Emacs.
 
@@ -30,6 +30,16 @@
 
 ;;; Code:
 
+;;;; Dependencies
+
+(require 'gtd-db)
+
+;;;; Variables
+
+(defvar gtd-calendar-buf "*Gtd Calendar*")
+
+(defvar gtd-calendar-mode-map nil)
+
 (defvar gtd-calendar-column-blanks 3
   "The number of blanks between each column in calendar.")
 
@@ -37,20 +47,25 @@
   "The number of blanks that inserted at places with date.
 This value equals to the length of weekday.")
 
-(defun gtd-calendar--date-seq (date)
-  "Return a sequence of current month's date according to date DATE."
-  (let* ((year-str (substring date 0 4))
-         (year (string-to-number year-str))
-         (month-str (substring date 5 7))
-         (month (string-to-number month-str))
-         (day-num (date-days-in-month year month))
-         (first-day (concat year-str "-" month-str "-01"))
-         (day-of-week (string-to-number
-                       (format-time-string
-                        "%u" (gtd-time-to-seconds first-day))))
-         (date-seq (number-sequence 1 day-num)))
-    (dotimes (_ (1- day-of-week)) (push nil date-seq))
-    (seq-partition date-seq 7)))
+;;;; Functions
+
+(defun gtd-calendar--date-seq (type date)
+  "Return a sequence of TYPE calendar date
+according to date DATE."
+  (let ((year-str (substring date 0 4))
+        (month-str (substring date 5 7)))
+    (pcase type
+      ('month
+       (let* ((year (string-to-number year-str))
+              (month (string-to-number month-str))
+              (day-num (date-days-in-month year month))
+              (first-day (format "%s-%s-01" year-str month-str))
+              (day-of-week (string-to-number
+                            (format-time-string
+                             "%u" (gtd-time-to-seconds first-day))))
+              (date-seq (number-sequence 1 day-num)))
+         (dotimes (_ (1- day-of-week)) (push nil date-seq))
+         (seq-partition date-seq 7))))))
 
 (defun gtd--tasks-count-by-date (date)
   "Return the count of tasks according to date DATE."
@@ -70,7 +85,7 @@ according to date DATE."
                           (gtd--tasks-count-by-date
                            (gtd--day-to-date month item))))
                       lst))
-            (gtd-calendar--date-seq date))))
+            (gtd-calendar--date-seq 'month date))))
 
 (defun gtd-calendar-month-insert (date)
   "Draw a month calendar according to DATE.
@@ -79,7 +94,7 @@ of tasks belonging to each date."
   (let* ((seconds (gtd-date-to-seconds date))
          (month-header (format-time-string "%B, %Y" seconds))
          (curr-day (string-to-number (substring date 8)))
-         (date-seq (gtd-calendar--date-seq date))
+         (date-seq (gtd-calendar--date-seq 'month date))
          (count-seq (gtd-calendar--task-num-seq date))
          (len (length date-seq)))
     (insert (propertize month-header
@@ -111,12 +126,12 @@ of tasks belonging to each date."
                                       'face 'region
                                       'action #'gtd-calendar-show-task
                                       'help-echo "Show tasks"
-                                      'follow-link nil)
+                                      'follow-link t)
                 (insert-text-button day-str
                                     'face nil
                                     'action #'gtd-calendar-show-task
                                     'help-echo "Show tasks"
-                                    'follow-link nil)))
+                                    'follow-link t)))
           (self-insert-command gtd-calendar-weekday-blanks ? ))
         (self-insert-command gtd-calendar-column-blanks ? ))
       (insert "\n")
@@ -154,28 +169,50 @@ of tasks belonging to each date."
      (insert (propertize data 'face 'bold)))
     (_ (insert data))))
 
-;;;###autoload
-(defun gtd-calendar-show-month (&optional date)
-  "Show gtd month calendar."
-  (interactive)
+(defun gtd-calendar--show (type &optional date)
+  "Show the TYPE of calendar and tasks on DATE."
   (let* ((date (or date (gtd-format-date)))
          (month (substring date 0 7))
-         (_ (gtd--switch-to-buffer "Gtd Calendar"))
-         (tasks (gtd-db-query
-                 `[:select * :from task
-                           :where ,(gtd--parse-rules
-                                    `(date ,date))]))
+         (_ (gtd--switch-to-buffer gtd-calendar-buf))
+         (tasks (gtd-db-tasks-by-date date))
          (ewoc (ewoc-create 'gtd-calendar-pp
                             (propertize "📅 Calendar\n"
                                         'face 'gtd-header-face)
                             (substitute-command-keys
-                             "\n\\{gtd-mode-map}"))))
+                             "\n\\{gtd-calendar-mode-map}"))))
     (set (make-local-variable 'gtd-ewoc) ewoc)
     (set (make-local-variable 'gtd-month) month)
     (set (make-local-variable 'gtd-date) date)
-    (ewoc-enter-last ewoc `(calendar :type month :date ,date))
+    (pcase type
+      ('month
+       (ewoc-enter-last ewoc `(calendar :type month :date ,date)))
+      ('week
+       (ewoc-enter-last ewoc `(calendar :type week :date ,date)))
+      ('day
+       (ewoc-enter-last ewoc `(calendar :type day :date ,date))))
     (gtd--show-tasks gtd-ewoc tasks)
     (read-only-mode 1)))
+
+;;;###autoload
+(defun gtd-calendar-show-month (&optional date)
+  "Show gtd month calendar. If DATE is non-nil, 
+show the tasks on DATE."
+  (interactive)
+  (gtd-calendar--show 'month date))
+
+;;;###autoload
+(defun gtd-calendar-show-week (&optional date)
+  "Show gtd week calendar. If DATE is non-nil, 
+show the tasks on DATE."
+  (interactive)
+  (gtd-calendar--show 'week date))
+
+;;;###autoload
+(defun gtd-calendar-show-day (&optional date)
+  "Show gtd day calendar. If DATE is non-nil,
+show the tasks on DATE."
+  (interactive)
+  (gtd-calendar--show 'day date))
 
 ;;;###autoload
 (defun gtd-calendar-show-task (&optional btn)
@@ -194,6 +231,11 @@ of tasks belonging to each date."
     ('month (gtd-calendar-month-insert date))
     ('week (gtd-calendar-week-insert date))
     ('day (gtd-calendar-day-insert date))))
+
+;;;###autoload
+(define-minor-mode gtd-calendar-mode
+  "Minor mode for gtd calendar."
+  nil nil nil)
 
 (provide 'gtd-calendar)
 ;;; gtd-calendar.el ends here

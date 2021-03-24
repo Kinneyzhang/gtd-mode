@@ -1,12 +1,12 @@
-;;; gtd-utils.el --- purpose
+;;; gtd-utils.el --- Utilities functions  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2021 Kinney Zhang
 ;;
 ;; Version: 0.0.1
-;; Keywords: keyword1 keyword2
-;; Author: Kinney Zhang <kinneyzhang666 AT gmail DOT com>
-;; URL: http://github.com/usrname/gtd-utils
-;; Package-Requires: ((emacs "24.4"))
+;; Keywords: gtd convenience
+;; Author: Kinney Zhang <kinneyzhang666@gmail.com>
+;; URL: https://github.com/Kinneyzhang/gtd-mode
+;; Package-Requires: ((emacs "26.1"))
 
 ;; This file is not part of GNU Emacs.
 
@@ -37,7 +37,6 @@
 (defvar gtd-data)
 (defvar gtd-checklists)
 (defvar gtd-smart-checklists)
-(defvar gtd-smart-default-rules)
 
 (defvar gtd-weekday-seq '("Mo" "Tu" "We" "Th" "Fr" "Sa" "Su"))
 
@@ -153,8 +152,8 @@ If TIME is nil, fomrat current time."
   "Make NUM times of OPERATION change to FROM date.
 If FROM is nil, make changes to the current date."
   (let ((from (or from (gtd-format-date))))
-    (eval `(gtd-seconds-to-date (,operation (gtd-date-to-seconds from)
-                                            (* num 86400))))))
+    (eval `(gtd-seconds-to-date (,operation ,(gtd-date-to-seconds from)
+                                            ,(* num 86400))))))
 
 (defun gtd--day-to-str (day &optional with-zero)
   "Convert the number DAY to a string.

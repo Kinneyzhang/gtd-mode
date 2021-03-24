@@ -1,12 +1,12 @@
-;;; gtd-db.el --- purpose
+;;; gtd-db.el --- Gtd database module  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2021 Kinney Zhang
 ;;
 ;; Version: 0.0.1
-;; Keywords: keyword1 keyword2
-;; Author: Kinney Zhang <kinneyzhang666 AT gmail DOT com>
-;; URL: http://github.com/Kinneyzhang/gtd-db
-;; Package-Requires: ((emacs "24.4"))
+;; Keywords: gtd convenience
+;; Author: Kinney Zhang <kinneyzhang666@gmail.com>
+;; URL: https://github.com/Kinneyzhang/gtd-mode
+;; Package-Requires: ((emacs "26.1"))
 
 ;; This file is not part of GNU Emacs.
 
@@ -33,6 +33,7 @@
 (require 'org-id)
 (require 'emacsql)
 (require 'emacsql-sqlite3)
+(require 'gtd-utils)
 
 (defcustom gtd-db-location
   (expand-file-name "gtd.db" (concat user-emacs-directory "gtd"))
@@ -98,6 +99,11 @@ SQL can be either the emacsql vector representation, or a string."
   "Retrive all tasks which satisfy the CONDITIONS."
   (gtd-db-query `[:select * :from task
                           :where ,conditions]))
+
+(defun gtd-db-tasks-by-date (date)
+  (gtd-db-query
+   `[:select * :from task :where ,(gtd--parse-rules
+                                   `(date ,date))]))
 
 (provide 'gtd-db)
 ;;; gtd-db.el ends here

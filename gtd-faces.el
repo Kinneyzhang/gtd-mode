@@ -1,12 +1,12 @@
-;;; gtd-faces.el --- purpose
+;;; gtd-faces.el --- Face definitions  -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2021 Kinney Zhang
 ;;
 ;; Version: 0.0.1
-;; Keywords: keyword1 keyword2
-;; Author: Kinney Zhang <kinneyzhang666 AT gmail DOT com>
-;; URL: http://github.com/usrname/gtd-faces
-;; Package-Requires: ((emacs "24.4"))
+;; Keywords: gtd convenience
+;; Author: Kinney Zhang <kinneyzhang666@gmail.com>
+;; URL: https://github.com/Kinneyzhang/gtd-mode
+;; Package-Requires: ((emacs "26.1"))
 
 ;; This file is not part of GNU Emacs.
 
