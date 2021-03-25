@@ -109,7 +109,8 @@ The built-in smart checklists are 'All', 'Today', 'Tomorrow',
   (let ((ewoc (ewoc-create 'gtd-checklists-pp
                            (propertize "All Checklists\n"
                                        'face 'gtd-header-face)
-                           "\nPress the key in front or click checklist button.")))
+                           (substitute-command-keys
+                            "\n\\{gtd-mode-map}"))))
     (set (make-local-variable 'gtd-ewoc) ewoc)
     (when gtd-shown-smart-checklists
       (dolist (item gtd-shown-smart-checklists)
@@ -141,7 +142,8 @@ The built-in smart checklists are 'All', 'Today', 'Tomorrow',
       (define-key gtd-checklist-mode-map (kbd key)
         (lambda ()
           (interactive)
-          (gtd-show-checklist-tasks checklist))))))
+          (gtd-show-checklist-tasks checklist)))))
+  (define-key gtd-checklist-mode-map (kbd "+") #'gtd-add-task))
 
 (provide 'gtd-checklist)
 ;;; gtd-checklist.el ends here

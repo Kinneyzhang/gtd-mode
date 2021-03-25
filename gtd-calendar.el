@@ -33,6 +33,11 @@
 ;;;; Dependencies
 
 (require 'gtd-db)
+(require 'gtd-utils)
+
+;;;; Declarations
+
+(defvar gtd-month)
 
 ;;;; Variables
 
@@ -124,11 +129,13 @@ of tasks belonging to each date."
               (if (= curr-day day)
                   (insert-text-button day-str
                                       'face 'region
+                                      'date (concat gtd-month "-" (gtd--day-to-str day t))
                                       'action #'gtd-calendar-show-task
                                       'help-echo "Show tasks"
                                       'follow-link t)
                 (insert-text-button day-str
                                     'face nil
+                                    'date (concat gtd-month "-" (gtd--day-to-str day t))
                                     'action #'gtd-calendar-show-task
                                     'help-echo "Show tasks"
                                     'follow-link t)))
@@ -175,11 +182,12 @@ of tasks belonging to each date."
          (month (substring date 0 7))
          (_ (gtd--switch-to-buffer gtd-calendar-buf))
          (tasks (gtd-db-tasks-by-date date))
+         (gtd-keymap (append gtd-mode-map (cdr gtd-task-mode-map)))
          (ewoc (ewoc-create 'gtd-calendar-pp
                             (propertize "📅 Calendar\n"
                                         'face 'gtd-header-face)
                             (substitute-command-keys
-                             "\n\\{gtd-calendar-mode-map}"))))
+                             "\n\\{gtd-keymap}"))))
     (set (make-local-variable 'gtd-ewoc) ewoc)
     (set (make-local-variable 'gtd-month) month)
     (set (make-local-variable 'gtd-date) date)
@@ -191,6 +199,7 @@ of tasks belonging to each date."
       ('day
        (ewoc-enter-last ewoc `(calendar :type day :date ,date))))
     (gtd--show-tasks gtd-ewoc tasks)
+    (gtd-calendar-mode 1)
     (read-only-mode 1)))
 
 ;;;###autoload
@@ -235,7 +244,26 @@ show the tasks on DATE."
 ;;;###autoload
 (define-minor-mode gtd-calendar-mode
   "Minor mode for gtd calendar."
-  nil nil nil)
+  nil nil nil
+  (when gtd-calendar-mode
+    (gtd-calendar-set-keybindings)))
+
+(defun gtd-calendar-switch-date (day-str)
+  "Switch to the tasks view of date DATE consists 
+of gtd-month and DAY-STR."
+  (let* ((date (format "%s-%s" gtd-month day-str))
+         (_ (progn (goto-char (point-min))
+                   (text-property-search-forward 'date date t)
+                   (backward-char 1))))
+    (push-button)))
+
+(defun gtd-calendar-set-keybindings ()
+  (setq gtd-calendar-mode-map (make-sparse-keymap))
+  (dolist (day-str (gtd--day-str-seq gtd-month))
+    (define-key gtd-calendar-mode-map (kbd day-str)
+      (lambda ()
+        (interactive)
+        (gtd-calendar-switch-date day-str)))))
 
 (provide 'gtd-calendar)
 ;;; gtd-calendar.el ends here

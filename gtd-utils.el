@@ -164,6 +164,16 @@ If WITH-ZERO is non-nil, concat zero to number below ten."
         (number-to-string day))
     (number-to-string day)))
 
+(defun gtd--day-str-seq (year-month)
+  "Convert the YEAR-MONTH string to a sequence of day string."
+  (let* ((year (string-to-number (substring year-month 0 4)))
+         (month (string-to-number (substring year-month 5 7)))
+         (day-nums (date-days-in-month year month))
+         (day-seq (number-sequence 1 day-nums)))
+    (mapcar (lambda (day)
+              (gtd--day-to-str day t))
+            day-seq)))
+
 (defun gtd--day-to-date (month day)
   "Convert the number DAY to date string according to MONTH."
   (concat month "-" (gtd--day-to-str day t)))

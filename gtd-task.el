@@ -322,10 +322,12 @@ Withdraw the finished task if the task is finished."
                          `[:select * :from task
                                    :where ,(gtd--parse-rules rules)])
                       (gtd-db-query `[:select * :from task]))))))
+         (gtd-keymap (append gtd-mode-map (cdr gtd-task-mode-map)))
          (ewoc (ewoc-create 'gtd-tasks-pp
                             (propertize (format "%s %s\n" icon checklist)
                                         'face 'gtd-header-face)
-                            "\nAdd the task key description...")))
+                            (substitute-command-keys
+                             "\n\\{gtd-keymap}"))))
     (set (make-local-variable 'gtd-ewoc) ewoc)
     (set (make-local-variable 'gtd-current-checklist) checklist)
     (gtd--show-tasks ewoc tasks)
@@ -333,6 +335,8 @@ Withdraw the finished task if the task is finished."
     ;; idea: use ewoc-goto-node
     (gtd-task-mode 1)
     (read-only-mode 1)))
+
+(defvar gtd-keymap nil)
 
 ;;;###autoload
 (defun gtd-add-task ()

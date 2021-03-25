@@ -83,11 +83,17 @@
 (define-derived-mode gtd-mode fundamental-mode "GTD"
   (use-local-map gtd-mode-map))
 
+(defun gtd-kill-buffer ()
+  (interactive)
+  (kill-buffer gtd-checklist-buf))
+
 (progn
   (setq gtd-mode-map (make-sparse-keymap))
+  (define-key gtd-mode-map (kbd "B") #'gtd-calendar-show-month)
   (define-key gtd-mode-map (kbd "C") #'gtd-show-checklists)
   (define-key gtd-mode-map (kbd "q") #'kill-current-buffer)
-  (define-key gtd-mode-map (kbd "g") #'gtd-refresh-buffer))
+  (define-key gtd-mode-map (kbd "g") #'gtd-refresh-buffer)
+  (define-key gtd-mode-map (kbd "+") #'gtd-add-task))
 
 (provide 'gtd)
 ;;; gtd.el ends here
