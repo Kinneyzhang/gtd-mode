@@ -258,12 +258,13 @@ of gtd-month and DAY-STR."
     (push-button)))
 
 (defun gtd-calendar-set-keybindings ()
-  (setq gtd-calendar-mode-map (make-sparse-keymap))
-  (dolist (day-str (gtd--day-str-seq gtd-month))
-    (define-key gtd-calendar-mode-map (kbd day-str)
-      (lambda ()
-        (interactive)
-        (gtd-calendar-switch-date day-str)))))
+  (setq gtd-calendar-mode-map
+        (let ((map (make-sparse-keymap)))
+          (dolist (day-str (gtd--day-str-seq gtd-month))
+            (define-key map (kbd day-str)
+              (lambda ()
+                (interactive)
+                (gtd-calendar-switch-date day-str)))))))
 
 (provide 'gtd-calendar)
 ;;; gtd-calendar.el ends here

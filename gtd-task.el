@@ -34,7 +34,14 @@
 
 (defvar gtd-task-buf "*Gtd Task*")
 
-(defvar gtd-task-mode-map nil)
+(defvar gtd-task-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "D") #'gtd-task-show-details-toggle)
+    (define-key map (kbd "A") #'gtd-task-show-finished-toggle)
+    (define-key map (kbd "+") #'gtd-add-task)
+    (define-key map (kbd "d") #'gtd-finish-task)
+    (define-key map (kbd "u") #'gtd-withdraw-finished-task)
+    (define-key map (kbd "e") #'gtd-task-edit)))
 
 (defvar gtd-task-edit-actions
   '(("Rename Task" . gtd-task-rename)
@@ -466,15 +473,6 @@ If ID is nil, edit the memo of task at point."
 (define-minor-mode gtd-task-mode
   "Minor mode for gtd task."
   nil nil nil)
-
-(progn
-  (setq gtd-task-mode-map (make-sparse-keymap))
-  (define-key gtd-task-mode-map (kbd "D") #'gtd-task-show-details-toggle)
-  (define-key gtd-task-mode-map (kbd "A") #'gtd-task-show-finished-toggle)
-  (define-key gtd-task-mode-map (kbd "+") #'gtd-add-task)
-  (define-key gtd-task-mode-map (kbd "d") #'gtd-finish-task)
-  (define-key gtd-task-mode-map (kbd "u") #'gtd-withdraw-finished-task)
-  (define-key gtd-task-mode-map (kbd "e") #'gtd-task-edit))
 
 (provide 'gtd-task)
 ;;; gtd-task.el ends here
