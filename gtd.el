@@ -51,7 +51,8 @@
     (define-key map (kbd "C") #'gtd-show-checklists)
     (define-key map (kbd "q") #'kill-current-buffer)
     (define-key map (kbd "g") #'gtd-refresh-buffer)
-    (define-key map (kbd "+") #'gtd-add-task))
+    (define-key map (kbd "+") #'gtd-add-task)
+    map)
   "Keymap for `gtd-mode'")
 
 (defvar gtd-window-margin 4)

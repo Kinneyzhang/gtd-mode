@@ -41,7 +41,8 @@
     (define-key map (kbd "+") #'gtd-add-task)
     (define-key map (kbd "d") #'gtd-finish-task)
     (define-key map (kbd "u") #'gtd-withdraw-finished-task)
-    (define-key map (kbd "e") #'gtd-task-edit)))
+    (define-key map (kbd "e") #'gtd-task-edit)
+    map))
 
 (defvar gtd-task-edit-actions
   '(("Rename Task" . gtd-task-rename)
