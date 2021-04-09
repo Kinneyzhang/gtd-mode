@@ -39,11 +39,90 @@
 (require 'gtd-utils)
 (require 'gtd-task)
 (require 'gtd-calendar)
+(require 'gtd-habit)
+(require 'gtd-note)
 
 ;;;; Variables
 
 (defgroup gtd nil
   "Gtd implement in emacs.")
+
+(defvar gtd-multilingual-words
+  '(("task" :zh-cn "任务")
+    ("note" :zh-cn "笔记")
+    ("habit" :zh-cn "习惯")
+    ("today" :zh-cn "今天")
+    ("tomorrow" :zh-cn "明天")
+    ("next Monday" :zh-cn "下周一")
+    ("other" :zh-cn "其它")
+    
+    ;; habit
+    ("by day" :zh-cn "按天")
+    ("by week" :zh-cn "按周")
+    ("by period" :zh-cn "按时间间隔")
+
+    ("Monday" :zh-cn "周一")
+    ("Tuesday" :zh-cn "周二")
+    ("Wednesday" :zh-cn "周三")
+    ("Thursday" :zh-cn "周四")
+    ("Friday" :zh-cn "周五")
+    ("Saturday" :zh-cn "周六")
+    ("Sunday" :zh-cn "周日")
+
+    ("Choose or input the habit name" :zh-cn "选择或输入习惯名称")
+    ("Choose the frequency type of the habit" :zh-cn "选择习惯打卡的频率类型")
+    ("In these days" :zh-cn "在这些天")
+    ("How many days each week" :zh-cn "一周几天")
+    ("Every few days" :zh-cn "每隔几天")
+    ("How many times each day" :zh-cn "每天几次")
+    
+    ("early to bed" :zh-cn "早睡")
+    ("early to rise" :zh-cn "早起")
+    ("drink water" :zh-cn "喝水")
+    ("learn new words" :zh-cn "背单词")
+    ("get news updates" :zh-cn "看新闻")
+    ("walk the dog" :zh-cn "遛狗")
+    ("be a good cat keeper" :zh-cn "做铲屎官")
+    ("eat breakfast" :zh-cn "吃早餐")
+    ("stretch" :zh-cn "拉伸")
+    ("reading" :zh-cn "阅读")
+    ("self-reflection" :zh-cn "自我反思")
+    ("plan your day" :zh-cn "计划一天")
+    ("running" :zh-cn "跑步")
+    ("eat fruits" :zh-cn "吃水果")
+    ("yoga" :zh-cn "瑜伽")
+    ("track expenses" :zh-cn "记账")
+    ("keep a diary" :zh-cn "写日记")
+    ("eat veggies" :zh-cn "吃蔬菜")
+    ("do push-ups" :zh-cn "做俯卧撑")
+    ("quit snacks" :zh-cn "戒零食")
+    ("quit sugar" :zh-cn "戒糖")
+    ("quit alcohol" :zh-cn "戒酒")
+    ("go cycling" :zh-cn "骑行")
+    ("no dirty words" :zh-cn "不说脏话")
+    ("swimming" :zh-cn "游泳")
+    ("connect a loved one" :zh-cn "保持联系")
+    ("take a walk" :zh-cn "散步")
+    ("learn musical instruments" :zh-cn "学习乐器")
+    ("meditate" :zh-cn "冥想")
+    ("take a shower" :zh-cn "洗澡")
+    ("water flowers" :zh-cn "浇花")
+    ("quit smoking" :zh-cn "戒烟")
+    ("watch a movie" :zh-cn "看电影")
+    ("take medicine" :zh-cn "吃药")
+    ("clean up" :zh-cn "打扫卫生")
+    ("do housework" :zh-cn "做家务")
+    ("reduce screen time" :zh-cn "少看手机")
+    ("do skincare" :zh-cn "护肤")
+    ("smile to yourself" :zh-cn "面带微笑")
+    ("no video games" :zh-cn "禁游戏")
+
+    ("Choose a type" :zh-cn "选择类型")
+    ("Input the task name" :zh-cn "请输入任务名称")
+    ("Input the task date" :zh-cn "请选择任务日期")
+    ("Choose the task priority" :zh-cn "请选择任务优先级")
+    ("Choose the task tags" :zh-cn "请选择任务标签")
+    ("Choose the task checklist" :zh-cn "请选择任务所属清单")))
 
 (defvar gtd-mode-map
   (let ((map (make-sparse-keymap)))
@@ -54,6 +133,15 @@
     (define-key map (kbd "+") #'gtd-add-task)
     map)
   "Keymap for `gtd-mode'")
+
+(defvar gtd-types
+  '("task" "habit" "note"))
+
+(defvar gtd-dates
+  '("today" "tomorrow" "other"))
+
+(defvar gtd-chinese-p nil
+  "Non-nil means translating all keywords in gtd-mode to chinese.")
 
 (defvar gtd-window-margin 4)
 
@@ -202,6 +290,16 @@ The built-in smart checklists are 'All', 'Today', 'Tomorrow',
 (defun gtd-kill-buffer ()
   (interactive)
   (kill-buffer gtd-checklist-buf))
+
+;;;###autoload
+(defun gtd-new ()
+  "Create a new gtd task, habit or note."
+  (interactive)
+  (let* ((type (gtd-completing-read "Choose a type" gtd-types nil t)))
+    (pcase type
+      ("task" (gtd-add-task))
+      ("habit" (gtd-habit-new))
+      ("note" (gtd-note-new)))))
 
 (provide 'gtd)
 ;;; gtd.el ends here

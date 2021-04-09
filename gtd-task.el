@@ -350,16 +350,21 @@ Withdraw the finished task if the task is finished."
 (defun gtd-add-task ()
   "Add a task."
   (interactive)
-  (let ((name (completing-read "Input the task name: " nil))
-        (date (completing-read "Input the task date: " nil))
-        (priority (completing-read "Choose the task priority: "
-                                   (mapcar #'car gtd-priorities) nil t))
-        (tags (completing-read-multiple "Choose the task tags: "
-                                        gtd-tags nil t))
-        (checklist (or gtd-current-checklist
-                       (completing-read "Choose the task checklist: "
-                                        (gtd-checklists-attrs) nil t)))
-        memo parent task-args)
+  (let* ((name (gtd-completing-read "Input the task name" nil))
+         (date-str (gtd-completing-read "Input the task date"
+                                        gtd-dates nil t))
+         (date (pcase date-str
+                 ("today" (gtd-format-date))
+                 ("tomorrow" (gtd-date-change '+ 1))
+                 (_ (org-read-date))))
+         (priority (gtd-completing-read "Choose the task priority"
+                                        (mapcar #'car gtd-priorities) nil t))
+         (tags (gtd-completing-read-multiple "Choose the task tags"
+                                             gtd-tags nil t))
+         (checklist (or gtd-current-checklist
+                        (gtd-completing-read "Choose the task checklist"
+                                             (gtd-checklists-attrs) nil t)))
+         memo parent task-args)
     (setq date (gtd-date-to-seconds date))
     (setq priority (gtd-plist-get priority gtd-priorities :id))
     (setq task-args
@@ -401,7 +406,7 @@ If ID is nil, rename the task at point."
   (let* ((id (or id (ewoc-data (ewoc-locate gtd-ewoc))))
          (arg-lst (gtd-task-args id gtd-data))
          (name (plist-get arg-lst :name))
-         (new-name (completing-read
+         (new-name (gtd-completing-read
                     (format "Rename the task '%s': " name) nil))
          task-args)
     (unless (string= new-name name)
@@ -418,7 +423,7 @@ If ID is nil, edit the memo of task at point."
          (name (plist-get arg-lst :name))
          (memo (plist-get arg-lst :memo))
          (new-memo
-          (completing-read
+          (gtd-completing-read
            (format "Edit the memo of task '%s': " name) nil nil nil memo))
          task-args)
     (unless (string= new-memo memo)
@@ -442,7 +447,7 @@ If ID is nil, edit the memo of task at point."
   (interactive)
   (let* ((id (ewoc-data (ewoc-locate gtd-ewoc)))
          (name (gtd-task-attr id :name))
-         (action (completing-read
+         (action (gtd-completing-read
                   (format "Choose the action to task '%s'" name)
                   gtd-task-edit-actions nil t))
          (func (cdr (assoc action gtd-task-edit-actions))))
