@@ -53,7 +53,29 @@
       (status :not-null)
       date tags priority
       (checklist :not-null)
-      memo parent children]))
+      memo parent children])
+    (habit
+     [(id :primary-key)
+      (name :not-null)
+      (frequency-type :not-null)
+      (frequency-value :not-null)
+      (goal :not-null)
+      (remind-time)
+      (remind-string)
+      (timestamp :not-null)
+      (is_archived)])
+    (habit-record
+     [(id :primary-key)
+      (timestamp :not-null)
+      (habit :not-null)
+      (comment)]
+     (:foreign-key [habit] :references habit [name]
+		   :on-delete :cascade))
+    (note
+     [(id :primary-key)
+      (title :not-null)
+      (content :not-null)
+      (timestamp :not-null)]))
   "Table schemata of gtd-db.")
 
 (defun gtd-db--get-connection ()

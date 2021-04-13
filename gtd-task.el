@@ -34,11 +34,18 @@
 
 (defvar gtd-task-buf "*Gtd Task*")
 
+(defvar gtd-task-multilingual
+  '(("Input the task name" :zh-cn "请输入任务名称")
+    ("Input the task date" :zh-cn "请选择任务日期")
+    ("Choose the task priority" :zh-cn "请选择任务优先级")
+    ("Choose the task tags" :zh-cn "请选择任务标签")
+    ("Choose the task checklist" :zh-cn "请选择任务所属清单")))
+
 (defvar gtd-task-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "D") #'gtd-task-show-details-toggle)
     (define-key map (kbd "A") #'gtd-task-show-finished-toggle)
-    (define-key map (kbd "+") #'gtd-add-task)
+    (define-key map (kbd "+") #'gtd-task-new)
     (define-key map (kbd "d") #'gtd-finish-task)
     (define-key map (kbd "u") #'gtd-withdraw-finished-task)
     (define-key map (kbd "e") #'gtd-task-edit)
@@ -347,7 +354,7 @@ Withdraw the finished task if the task is finished."
 (defvar gtd-keymap nil)
 
 ;;;###autoload
-(defun gtd-add-task ()
+(defun gtd-task-new ()
   "Add a task."
   (interactive)
   (let* ((name (gtd-completing-read "Input the task name" nil))

@@ -37,6 +37,7 @@
 (defvar gtd-data)
 (defvar gtd-checklists)
 (defvar gtd-smart-checklists)
+(defvar gtd-multilingual-vars)
 
 (defvar gtd-weekday-seq '("Mo" "Tu" "We" "Th" "Fr" "Sa" "Su"))
 
@@ -154,6 +155,10 @@ If TIME is nil, fomrat current time."
   "Format TIME to 'year-month-day hour:minute:second' format.
 If TIME is nil, fomrat current time."
   (format-time-string "%Y-%m-%d %H:%M:%S" (or time (current-time))))
+
+(defun gtd-current-seconds ()
+  "Return the seconds of current time, accurate to second."
+  (gtd-time-to-seconds (gtd-format-time)))
 
 (defun gtd-seconds-to-date (seconds)
   "Transform seconds to 'year-month-day' time format."
@@ -297,33 +302,37 @@ into the database query conditions."
 
 ;; Translate to Chinese
 
+(defun gtd-multilingual ()
+  (apply #'append (mapcar #'symbol-value gtd-multilingual-vars)))
+
 (defun gtd-word-cn (word)
-  "Translate the WORD to Chinese."
-  (gtd-plist-get word gtd-multilingual-words :zh-cn))
+  "Translate the WORD to Chinese if there exists."
+  (if-let ((word-cn (gtd-plist-get word (gtd-multilingual) :zh-cn)))
+      word-cn
+    word))
 
 (defun gtd-word-en (word)
-  "Translate the WORD to English."
-  (gtd-plist-keyword gtd-multilingual-words :zh-cn word))
+  "Translate the WORD to English if there exists."
+  (if-let ((word-en (gtd-plist-keyword (gtd-multilingual) :zh-cn word)))
+      word-en
+    word))
 
 (defun gtd-words-cn (words)
   "Translate the WORDS list to Chinese."
-  (mapcar (lambda (word)
-            (if-let ((word-cn (gtd-word-cn word)))
-                word-cn word))
-          words))
+  (mapcar #'gtd-word-cn words))
 
 (defun gtd-completing-read (prompt collection &rest args)
   (if gtd-chinese-p
-      (let ((prompt-cn (or (gtd-word-cn prompt) prompt))
-            (collection-cn (or (gtd-words-cn collection) collection)))
+      (let ((prompt-cn (gtd-word-cn prompt))
+            (collection-cn (gtd-words-cn collection)))
         (gtd-word-en
          (apply #'completing-read (concat prompt-cn ": ") collection-cn args)))
     (apply #'completing-read (concat prompt ": ") collection args)))
 
 (defun gtd-completing-read-multiple (prompt collection &rest args)
   (if gtd-chinese-p
-      (let ((prompt-cn (or (gtd-word-cn prompt) prompt))
-            (collection-cn (or (gtd-words-cn collection) collection)))
+      (let ((prompt-cn (gtd-word-cn prompt))
+            (collection-cn (gtd-words-cn collection)))
         (gtd-word-en
          (apply #'completing-read-multiple
                 (concat prompt-cn ": ") collection-cn args)))

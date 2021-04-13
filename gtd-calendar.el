@@ -96,7 +96,8 @@ according to date DATE."
   "Draw a month calendar according to DATE.
 Highlight the current selected date and show the number
 of tasks belonging to each date."
-  (let* ((seconds (gtd-date-to-seconds date))
+  (let* ((month (substring date 0 7))
+         (seconds (gtd-date-to-seconds date))
          (month-header (format-time-string "%B, %Y" seconds))
          (curr-day (string-to-number (substring date 8)))
          (date-seq (gtd-calendar--date-seq 'month date))
@@ -111,8 +112,7 @@ of tasks belonging to each date."
         ((pred (< i))
          (insert (propertize
                   (nth i gtd-weekday-seq)
-                  'face '(gtd-calendar-weekday-header
-                          )))
+                  'face '(gtd-calendar-weekday-header)))
          (self-insert-command gtd-calendar-column-blanks ? ))
         ((pred (>= i))
          (insert (propertize
@@ -129,13 +129,13 @@ of tasks belonging to each date."
               (if (= curr-day day)
                   (insert-text-button day-str
                                       'face 'region
-                                      'date (concat gtd-month "-" (gtd--day-to-str day t))
+                                      'date (concat month "-" (gtd--day-to-str day t))
                                       'action #'gtd-calendar-show-task
                                       'help-echo "Show tasks"
                                       'follow-link t)
                 (insert-text-button day-str
                                     'face nil
-                                    'date (concat gtd-month "-" (gtd--day-to-str day t))
+                                    'date (concat month "-" (gtd--day-to-str day t))
                                     'action #'gtd-calendar-show-task
                                     'help-echo "Show tasks"
                                     'follow-link t)))
@@ -158,6 +158,12 @@ of tasks belonging to each date."
              (format-time-string "%b %d" seconds)
              'face '(italic :height 1.2))
             "\n")))
+
+(defun gtd-calendar-week-insert (date)
+  "Insert a week calendar according to DATE.
+Highlight the current selected date and show the number
+of tasks belonging to each date."
+  (let (())))
 
 (defun gtd-calendar-pp (data)
   "Pretty printer for gtd calendar."
