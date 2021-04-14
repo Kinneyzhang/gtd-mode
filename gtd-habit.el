@@ -30,11 +30,17 @@
 
 ;;; Code:
 
+;;;; Requires
+
+(require 'gtd-utils)
+
 ;;;; Variables
 
 (defgroup gtd-habit nil
   "Habit of gtd."
   :group 'gtd)
+
+(defvar gtd-habit-buf "*Gtd Habit*")
 
 (defvar gtd-habits
   '("early to rise" "drink water" "learn new words" "get news updates"
@@ -120,7 +126,40 @@
      :zh-cn "提醒时间（用逗号隔开，例：'09:00,18:30'）")
     ("Sentence to remind" :zh-cn "提醒语句")))
 
+(defvar-local gtd-date nil)
+
+(defvar gtd-habit-show-archived t)
+
 ;;;; Functions
+
+(defun gtd-habit-pp (data)
+  "Pretty printer for gtd habit."
+  (pcase data
+    ((and (pred listp)
+          (let date (plist-get data :date))
+          (guard date))
+     (insert (propertize date 'face '(:height 1.2))))
+    ((and (pred listp)
+          (guard (org-uuidgen-p (car-safe data))))
+     (let* ((id (nth 0 data))
+            (habit (nth 1 data))
+            (frequency-type (nth 2 data))
+            (frequency-value (nth 3 data))
+            (goal (string-to-number (nth 4 data)))
+            (is_archived (nth 8 data))
+            (count (caar (gtd-db-query
+                          `[:select (funcall count habit)
+                                    :from habit-record
+                                    :where (= habit ,id)])))
+            (is_done (= goal count)))
+       (insert
+        (propertize (format "[%s/%s] %s" count goal habit)
+                    'line-prefix
+                    (propertize (if is_done "✅ " "⬜ ")
+                                'display '((height 0.8)))))))
+    ((pred stringp)
+     (insert (propertize data 'face '(bold :height 1.1))))
+    (_ (insert ""))))
 
 ;;;###autoload
 (defun gtd-habit-new ()
@@ -154,67 +193,183 @@
          (timestamp (gtd-current-seconds))
          (db-vec `[,id ,habit ,frequency-type ,frequency-value ,goal
                        ,remind-time ,remind-string ,timestamp 0]))
-    (when (gtd-db-query `[:insert :into habit :values (,db-vec)])
-      (message "Habit '%s' is added successfully!" habit))))
+    (gtd-db-query `[:insert :into habit :values (,db-vec)])
+    (gtd-habit-refresh)))
 
-(defvar gtd-habit-buf "*Gtd Habit*")
+;;;###autoload
+(defun gtd-habit-archive ()
+  "Archive the habit at point."
+  (interactive)
+  (let* ((node (ewoc-locate gtd-ewoc))
+         (id (nth 0 (ewoc-data node))))
+    (gtd-db-query `[:update habit :set (= is_archived 1)
+                            :where (= id ,id)])
+    (gtd-habit-refresh)))
 
+;;;###autoload
+(defun gtd-habit-active ()
+  "Active the habit at point."
+  (interactive)
+  (let* ((id (nth 0 (gtd-ewoc-data))))
+    (gtd-db-query `[:update habit :set (= is_archived 0)
+                            :where (= id ,id)])
+    (gtd-habit-refresh)))
+
+;;;###autoload
+(defun gtd-habit-delete ()
+  "Delete the habit at point."
+  (interactive)
+  (let* ((node (ewoc-locate gtd-ewoc))
+         (data (ewoc-data node))
+         (id (nth 0 data)))
+    (if (y-or-n-p "Do you want to delete this habit\
+ and all the records?")
+        (progn
+          (let ((inhibit-read-only 1))
+            (ewoc-delete gtd-ewoc node))
+          (gtd-db-query `[:delete :from habit
+                                  :where (= id ,id)]))
+      (message ""))))
+
+;;;###autoload
 (defun gtd-habit-show (&optional date)
   "Show gtd habits on date DATE."
   (interactive)
   (gtd--switch-to-buffer gtd-habit-buf)
   (let* ((date (or date (gtd-format-date)))
+         (slash-date (replace-regexp-in-string "-" "/" date))
+         (seconds (gtd-date-to-seconds date))
+         (week (format-time-string "%a" seconds))
+         (full-week (format-time-string "%A" seconds))
          (ewoc (ewoc-create 'gtd-habit-pp
-                            (propertize "Habit Record\n"
+                            (propertize "🌀 Habit Record\n"
                                         'face 'gtd-header-face)
                             (substitute-command-keys
                              "\n\\{gtd-habit-mode-map}")))
-         (seconds (gtd-date-to-seconds (gtd-date-change '+ 1 date)))
-         (ids (mapcar #'car (gtd-db-query `[:select id :from habit
-                                                    :where (< timestamp ,seconds)]))))
-    (ewoc-enter-last ewoc date)
-    (dolist (id ids)
-      (ewoc-enter-last ewoc id))
+         (next-seconds (gtd-date-to-seconds (gtd-date-change '+ 1 date)))
+         (habits (gtd-db-query `[:select * :from habit
+                                         :where (< timestamp ,next-seconds)]))
+         (habits (seq-filter (lambda (habit)
+                               (let* ((frequency-type (nth 2 habit))
+                                      (frequency-value (nth 3 habit))
+                                      (timestamp (nth 7 habit))
+                                      (date (gtd-seconds-to-date timestamp))
+                                      (date-seconds (gtd-date-to-seconds date)))
+                                 (pcase frequency-type
+                                   ("by day"
+                                    (member full-week frequency-value))
+                                   ("by period"
+                                    (= (% (floor (- seconds date-seconds))
+                                          (* (string-to-number frequency-value)
+                                             86400))
+                                       0))
+                                   (_ t))))
+                             habits))
+         (grouped-habits (seq-group-by
+                          (lambda (habit) (nth 8 habit))
+                          habits))
+         (active-habits (cdr (assoc 0 grouped-habits)))
+         (archived-habits (cdr (assoc 1 grouped-habits))))
+    (message "seconds: %s" seconds)
+    (ewoc-enter-last ewoc `(:date ,(concat slash-date " " week "\n")))
+    (dolist (habit active-habits)
+      (ewoc-enter-last ewoc habit))
+    (when gtd-habit-show-archived
+      (ewoc-enter-last ewoc "\nArchived Habits:")
+      (dolist (habit archived-habits)
+        (ewoc-enter-last ewoc habit)))
     (set (make-local-variable 'gtd-ewoc) ewoc)
     (set (make-local-variable 'gtd-date) date)
     (gtd-habit-mode 1)
     (read-only-mode 1)))
 
-(defun gtd-habit-pp (data)
-  "Pretty printer for gtd habit."
-  (pcase data
-    ((pred org-uuidgen-p)
-     (let ((habit (caar (gtd-db-query
-                         `[:select name :from habit
-                                   :where (= id ,data)]))))
-       (insert habit)))
-    (_ (insert (propertize data 'face '(bold :height 1.2)) "\n"))))
-
-(defun gtd-habit-next-date ()
+;;;###autoload
+(defun gtd-habit-record ()
+  "Record the habit at point."
   (interactive)
-  (let* ((curr-date gtd-date)
-         (date (gtd-date-change '+ 1 curr-date)))
-    (setq gtd-date date)
-    (gtd-habit-show date)))
+  (let* ((node (ewoc-locate gtd-ewoc))
+         (data (ewoc-data node))
+         (habit-id (nth 0 data))
+         (goal (string-to-number (nth 4 data)))
+         (count
+          (caar (gtd-db-query `[:select (funcall count habit)
+                                        :from habit-record
+                                        :where (= habit ,habit-id)])))
+         timestamp comment)
+    (if (< count goal)
+        (progn
+          (setq timestamp (gtd-time-to-seconds (gtd-format-time)))
+          (setq comment (gtd-completing-read "Say something" nil))
+          (gtd-db-query `[:insert :into habit-record
+                                  :values ([,timestamp ,habit-id ,comment])])
+          (ewoc-invalidate gtd-ewoc node))
+      (message "The habit has been finished!"))))
 
-(defvar-local gtd-date nil)
+;;;###autoload
+(defun gtd-habit-withdraw-record ()
+  "Withdraw the last record of habit at point."
+  (interactive)
+  (let ((habit-id (nth 0 (gtd-ewoc-data))))
+    (gtd-db-query `[:delete :from habit-record
+                            :where (= habit ,habit-id)
+                            :order-by (desc timestamp)
+                            :limit 1])
+    (ewoc-invalidate gtd-ewoc (gtd-ewoc-node))))
 
+;;;###autoload
+(defun gtd-habit-archived-toggle ()
+  "Toggle function for showing archived habit or not."
+  (interactive)
+  (if gtd-habit-show-archived
+      (setq gtd-habit-show-archived nil)
+    (setq gtd-habit-show-archived t))
+  (gtd-habit-show gtd-date))
+
+;;;###autoload
 (defun gtd-habit-previous-date ()
+  "Show the habits of previous date."
   (interactive)
-  (let* ((curr-date gtd-date)
-         (date (gtd-date-change '- 1 curr-date)))
-    (setq gtd-date date)
-    (gtd-habit-show date)))
+  (let ((date (gtd-date-change '- 1 gtd-date)))
+    (gtd-habit-show date)
+    (setq gtd-date date)))
 
-(defvar gtd-habit-mode-map
-  (let ((map (make-sparse-keymap)))
-    (define-key map (kbd ">") #'gtd-habit-next-date)
-    (define-key map (kbd "<") #'gtd-habit-previous-date)
-    map))
+;;;###autoload
+(defun gtd-habit-next-date ()
+  "Show the habits of next date."
+  (interactive)
+  (let ((date (gtd-date-change '+ 1 gtd-date)))
+    (gtd-habit-show date)
+    (setq gtd-date date)))
 
+;;;###autoload
+(defun gtd-habit-current-date ()
+  "Show the habits of current date."
+  (interactive)
+  (gtd-habit-show (gtd-format-date)))
+
+;;;###autoload
+(defun gtd-habit-refresh ()
+  "Refresh `gtd-habit-buf' buffer."
+  (interactive)
+  (gtd-habit-show gtd-date))
+
+;;;###autoload
 (define-minor-mode gtd-habit-mode
   "Minor mode for gtd habit."
-  nil nil nil)
+  :lighter ""
+  :keymap (let ((map (make-sparse-keymap)))
+            (define-key map (kbd "N") #'gtd-habit-new)
+            (define-key map (kbd "A") #'gtd-habit-archive)
+            (define-key map (kbd "a") #'gtd-habit-active)
+            (define-key map (kbd "D") #'gtd-habit-delete)
+            (define-key map (kbd "d") #'gtd-habit-record)
+            (define-key map (kbd "u") #'gtd-habit-withdraw-record)
+            (define-key map (kbd "<") #'gtd-habit-previous-date)
+            (define-key map (kbd ">") #'gtd-habit-next-date)
+            (define-key map (kbd "T") #'gtd-habit-archived-toggle)
+            (define-key map (kbd "g") #'gtd-habit-refresh)
+            (define-key map (kbd ".") #'gtd-habit-current-date)
+            map))
 
 (provide 'gtd-habit)
 ;;; gtd-habit.el ends here

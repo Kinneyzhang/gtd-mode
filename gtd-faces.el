@@ -35,7 +35,7 @@
   :group 'gtd)
 
 (defface gtd-header-face
-  '((t :height 1.6 :bold t))
+  '((t :height 1.6))
   "Faces for header in gtd buffer.")
 
 (defface gtd-calendar-month-header

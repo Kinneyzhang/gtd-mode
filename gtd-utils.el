@@ -42,9 +42,13 @@
 (defvar gtd-weekday-seq '("Mo" "Tu" "We" "Th" "Fr" "Sa" "Su"))
 
 ;;;; Utilities
+(defun gtd-ewoc-node ()
+  "Ewoc node at point."
+  (ewoc-locate gtd-ewoc))
+
 (defun gtd-ewoc-data ()
-  "Return the ewoc data at point."
-  (ewoc-data (ewoc-locate gtd-ewoc)))
+  "The data of ewoc node at point."
+  (ewoc-data (gtd-ewoc-node)))
 
 (defun gtd-plist->alist (plist)
   (if (null plist) '()
@@ -321,6 +325,10 @@ into the database query conditions."
   "Translate the WORDS list to Chinese."
   (mapcar #'gtd-word-cn words))
 
+(defun gtd-words-en (words)
+  "Translate the WORDS list to English."
+  (mapcar #'gtd-word-en words))
+
 (defun gtd-completing-read (prompt collection &rest args)
   (if gtd-chinese-p
       (let ((prompt-cn (gtd-word-cn prompt))
@@ -333,7 +341,7 @@ into the database query conditions."
   (if gtd-chinese-p
       (let ((prompt-cn (gtd-word-cn prompt))
             (collection-cn (gtd-words-cn collection)))
-        (gtd-word-en
+        (gtd-words-en
          (apply #'completing-read-multiple
                 (concat prompt-cn ": ") collection-cn args)))
     (apply #'completing-read-multiple (concat prompt ": ") collection args)))

@@ -65,11 +65,10 @@
       (timestamp :not-null)
       (is_archived)])
     (habit-record
-     [(id :primary-key)
-      (timestamp :not-null)
+     [(timestamp :primary-key)
       (habit :not-null)
       (comment)]
-     (:foreign-key [habit] :references habit [name]
+     (:foreign-key [habit] :references habit [id]
 		   :on-delete :cascade))
     (note
      [(id :primary-key)

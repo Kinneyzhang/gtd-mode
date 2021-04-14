@@ -164,7 +164,7 @@ Turning on this mode runs the normal hook `gtd-capture-mode-hook'."
   (interactive)
   (gtd--switch-to-buffer gtd-note-buf)
   (let ((ewoc (ewoc-create 'gtd-note-pp
-                           (propertize "Gtd Note\n"
+                           (propertize "📗 Gtd Note\n"
                                        'face 'gtd-header-face)
                            (substitute-command-keys
                             "\n\\{gtd-note-mode-map}")))
